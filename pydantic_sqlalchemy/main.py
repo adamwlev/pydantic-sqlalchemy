@@ -1,4 +1,5 @@
 from typing import Container, Optional, Type
+from enum import Enum
 
 from pydantic import BaseConfig, BaseModel, create_model
 from sqlalchemy.inspection import inspect
@@ -15,23 +16,25 @@ def sqlalchemy_to_pydantic(
     mapper = inspect(db_model)
     fields = {}
     for attr in mapper.attrs:
-        if isinstance(attr, ColumnProperty):
-            if attr.columns:
-                name = attr.key
-                if name in exclude:
-                    continue
-                column = attr.columns[0]
-                python_type: Optional[type] = None
-                if hasattr(column.type, "impl"):
-                    if hasattr(column.type.impl, "python_type"):
-                        python_type = column.type.impl.python_type
-                elif hasattr(column.type, "python_type"):
-                    python_type = column.type.python_type
-                assert python_type, f"Could not infer python_type for {column}"
-                default = None
-                if column.default is None and not column.nullable:
-                    default = ...
-                fields[name] = (python_type, default)
+        if not isinstance(attr, ColumnProperty) or not attr.columns:
+            continue
+
+        name = attr.key
+        if name in exclude:
+            continue
+        column = attr.columns[0]
+        python_type: Optional[type] = None
+        if hasattr(column.type, "impl") and hasattr(column.type.impl, "python_type"):
+            python_type = column.type.impl.python_type
+        elif hasattr(column.type, "python_type"):
+            python_type = column.type.python_type
+        assert python_type, f"Could not infer python_type for {column}"
+        if python_type == str and type(column.type).__name__.lower() == 'enum':
+            python_type = Enum(column.name, [(_, _) for _ in column.type.enums])
+        default = None
+        if column.default is None and not column.nullable:
+            default = ...
+        fields[name] = (python_type, default)
     pydantic_model = create_model(
         db_model.__name__, __config__=config, **fields  # type: ignore
     )
