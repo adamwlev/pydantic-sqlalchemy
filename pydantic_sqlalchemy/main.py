@@ -30,7 +30,7 @@ def sqlalchemy_to_pydantic(
             python_type = column.type.python_type
         assert python_type, f"Could not infer python_type for {column}"
         if python_type == str and type(column.type).__name__.lower() == 'enum':
-            python_type = Enum(column.name, [(_, _) for _ in column.type.enums])
+            python_type = Enum(column.name, [(_, _) for _ in column.type.enums], type=str)
         default = None
         if column.default is None and not column.nullable:
             default = ...
